@@ -20,30 +20,24 @@ REPORT zimport_export_csv.
 *----------------------------------------------------------------------*
 * Types                                                                *
 *----------------------------------------------------------------------*
-TYPES: BEGIN OF y_enterprise,
-         company_id           TYPE string,
-         company_name         TYPE string,
-         company_country      TYPE string,
-         company_sales        TYPE string,
-         company_profits      TYPE string,
-         company_assets       TYPE string,
-         company_market_value TYPE string,
-       END OF y_enterprise.
+DATA: y_estrutura_tabela_str TYPE REF TO cl_abap_structdescr,
+      y_estrutura_tabela     TYPE REF TO cl_abap_structdescr.
 
 *----------------------------------------------------------------------*
 * Tabela Interna                                                       *
 *----------------------------------------------------------------------*
-DATA: t_arquivo_csv TYPE TABLE OF y_enterprise,
-      t_tabela_csv  TYPE TABLE OF ztb_enterprise2,
+DATA: t_arquivo_csv TYPE REF TO cl_abap_tabledescr,
+      t_tabela_csv  TYPE TABLE OF zestudo_empresas,
       t_raw_data    TYPE truxs_t_text_data,
       t_filetable   TYPE filetable.
 
 *----------------------------------------------------------------------*
 * Work Area                                                            *
 *----------------------------------------------------------------------*
-DATA: w_tabela_csv TYPE ztb_enterprise2,
+DATA: w_tabela_csv TYPE zestudo_empresas,
       w_row        TYPE REF TO data,
-      w_filetable  LIKE LINE OF t_filetable.
+      w_filetable  LIKE LINE OF t_filetable,
+      w_data       TYPE REF TO DATA.
 
 *----------------------------------------------------------------------*
 * Variáveis                                                            *
@@ -56,11 +50,6 @@ DATA: l_delimiter       TYPE cl_rsda_csv_converter=>char VALUE '"',
       l_resposta        TYPE c.
 
 *----------------------------------------------------------------------*
-* Objetos                                                              *
-*----------------------------------------------------------------------*
-
-
-*----------------------------------------------------------------------*
 * Field-Symbols                                                        *
 *----------------------------------------------------------------------*
 FIELD-SYMBOLS: <f_tab>             TYPE ANY TABLE,
@@ -70,7 +59,7 @@ FIELD-SYMBOLS: <f_tab>             TYPE ANY TABLE,
 * Selection Screen                                                     *
 *----------------------------------------------------------------------*
 SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
-  PARAMETERS: p_file  TYPE string,
+  PARAMETERS: p_path  TYPE string,
               p_table TYPE string.
 SELECTION-SCREEN END OF BLOCK b1.
 
@@ -86,7 +75,41 @@ SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
 SELECTION-SCREEN END OF BLOCK b2.
 
 * Abre o seletor de arquivo
-AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_path.
+  IF p_import = abap_true.
+    PERFORM zf_abrir_selecao_arquivo.
+  ELSEIF p_export = abap_true.
+    PERFORM zf_abrir_selecao_pasta.
+  ENDIF.
+*----------------------------------------------------------------------*
+* Execução                                                             *
+*----------------------------------------------------------------------*
+AT SELECTION-SCREEN.
+  CASE 'X'.
+    WHEN p_import.
+      PERFORM zf_identifica_tabela.
+      PERFORM zf_validar_parametros_import.
+
+    WHEN p_export.
+      MESSAGE 'exportar tabela para csv' TYPE 'I'.
+
+   WHEN p_erase.
+      PERFORM zf_validar_parametros_erase.
+
+  ENDCASE.
+
+START-OF-SELECTION.
+
+*----------------------------------------------------------------------*
+* FORMs                                                                *
+*----------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*& Form zf_abrir_selecao_arquivo                                       *
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+FORM zf_abrir_selecao_arquivo.
   CALL METHOD cl_gui_frontend_services=>file_open_dialog
     EXPORTING
       window_title      = 'Arquivo CSV'
@@ -112,30 +135,96 @@ AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
 * Implement suitable error handling here
   ELSE.
     READ TABLE t_filetable INTO w_filetable INDEX 1.
-    p_file = w_filetable-filename.
+    p_path = w_filetable-filename.
   ENDIF.
+ENDFORM.
 
-*----------------------------------------------------------------------*
-* Execução                                                             *
-*----------------------------------------------------------------------*
-AT SELECTION-SCREEN.
-  CASE 'X'.
-    WHEN p_import.
-      PERFORM zf_validar_parametros_import.
+*&---------------------------------------------------------------------*
+*& Form zf_abrir_selecao_pasta                                         *
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+FORM zf_abrir_selecao_pasta.
+  DATA: pasta TYPE STRING.
 
-    WHEN p_export.
-      MESSAGE 'exportar tabela para csv' TYPE 'I'.
+CALL METHOD cl_gui_frontend_services=>directory_browse
+    EXPORTING
+      window_title      = 'Selecionar Pasta de exportação'
+      initial_folder    = 'c:\'
+    CHANGING
+      selected_folder   = pasta.
 
-   WHEN p_erase.
-      PERFORM zf_validar_parametros_erase.
+IF sy-subrc = 0.
+  p_path = pasta.
+ELSE.
+  MESSAGE 'Erro ao seleciona diretório' TYPE 'I'.
+ENDIF.
 
-  ENDCASE.
+ENDFORM.
 
-START-OF-SELECTION.
 
-*----------------------------------------------------------------------*
-* FORMs                                                                *
-*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& Form zf_validar_parametros_import.                                  *
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+FORM zf_identifica_tabela.
+
+DATA: l_nome_tabela_digitada TYPE DDOBJNAME.
+l_nome_tabela_digitada = p_table.
+
+
+DATA: lt_dfies TYPE TABLE OF dfies.
+
+DATA: t_estrutura       TYPE cl_abap_structdescr=>component_table,
+      w_campo_estrutura LIKE LINE OF t_estrutura.
+
+" Obtém os detalhes dos campos da tabela
+CALL FUNCTION 'DDIF_FIELDINFO_GET'
+  EXPORTING
+    tabname = l_nome_tabela_digitada  " Nome da tabela digitada pelo usuário
+  TABLES
+    DFIES_TAB   = lt_dfies      " Tabela para armazenar detalhes dos campos
+  EXCEPTIONS
+    not_found = 1
+    OTHERS    = 2.
+
+IF sy-subrc = 0.
+
+* Prepara tabela de components t_estrutura para gerar a estrutura da tabela digitada com todos os campos do tipo string
+  LOOP AT lt_dfies INTO DATA(ls_dfies).
+
+    IF ls_dfies-fieldname = 'MANDT'.
+      CONTINUE.
+    ENDIF.
+    w_campo_estrutura-name = ls_dfies-fieldname.
+    w_campo_estrutura-type = cl_abap_elemdescr=>get_string( ).
+    APPEND w_campo_estrutura TO t_estrutura.
+
+  ENDLOOP.
+
+* Cria estrutura dinamicamente
+  y_estrutura_tabela_str = cl_abap_structdescr=>create( t_estrutura ).
+
+  t_arquivo_csv = cl_abap_tabledescr=>create( p_line_type = y_estrutura_tabela_str
+                                              p_table_kind = cl_abap_tabledescr=>tablekind_std
+                                              p_unique = abap_false ).
+
+TRY.
+  CREATE DATA w_data TYPE HANDLE t_arquivo_csv.
+CATCH cx_sy_create_data_error.
+ENDTRY.
+
+TRY.
+  ASSIGN w_data->* TO <f_tab>.
+CATCH cx_root.
+ENDTRY.
+
+ELSE.
+  MESSAGE 'Tabela não existe!' TYPE 'I'.
+ENDIF.
+
+ENDFORM.
 
 *&---------------------------------------------------------------------*
 *& Form zf_validar_parametros_import.                                  *
@@ -144,8 +233,8 @@ START-OF-SELECTION.
 *&---------------------------------------------------------------------*
 FORM zf_validar_parametros_import.
 
-* Verifica se o parâmetro p_file está vazio
-  IF p_file IS INITIAL.
+* Verifica se o parâmetro p_path está vazio
+  IF p_path IS INITIAL.
     MESSAGE 'Selecione um arquivo csv valido.' TYPE 'I'.
 
 * Verifica se o parâmetro p_table está vazio
@@ -173,7 +262,7 @@ ENDFORM.
 FORM zf_ler_csv.
 
 * f_tab agora é uma referência(ponteiro) para t_arquivo_csv
-  ASSIGN t_arquivo_csv  TO <f_tab>.
+*  ASSIGN t_arquivo_csv  TO <f_tab>.
 
 * cria dinamicamente uma variável w_row que tem como tipo a estrutura de f_tab
   CREATE DATA w_row LIKE LINE OF <f_tab>.
@@ -184,7 +273,7 @@ FORM zf_ler_csv.
 * upload arquivo csv
   CALL FUNCTION 'GUI_UPLOAD'
     EXPORTING
-      filename = p_file
+      filename = p_path
       filetype = 'ASC'
     TABLES
       data_tab = t_raw_data.
@@ -211,7 +300,7 @@ FORM zf_processar_csv.
         IMPORTING
           e_s_data = <fw_tabela_csv_row>.
 
-      INSERT <fw_tabela_csv_row> INTO TABLE t_arquivo_csv.
+      INSERT <fw_tabela_csv_row> INTO TABLE <f_tab>.
 
     ENDLOOP.
   ENDIF.
@@ -225,26 +314,38 @@ ENDFORM.
 *&---------------------------------------------------------------------*
 FORM zf_inserir_dados_na_tabela.
 
-  LOOP AT t_arquivo_csv INTO DATA(w_arquivo_csv).
+  LOOP AT <f_tab> ASSIGNING <fw_tabela_csv_row>.
 
-    MOVE-CORRESPONDING w_arquivo_csv TO w_tabela_csv.
+    MOVE-CORRESPONDING <fw_tabela_csv_row> TO w_tabela_csv.
     APPEND w_tabela_csv TO t_tabela_csv.
 
   ENDLOOP.
 
   TRY.
 
-*     Nome da Tabela que deseja carregar o arquivo CSV
-      INSERT ztb_enterprise2 FROM TABLE t_tabela_csv.
-      COMMIT WORK.
+    IF p_table <> 'ZESTUDO_EMPRESAS'.
+      EXIT.
+    ENDIF.
 
+    DATA: l_tabname TYPE DD02L-TABNAME.
+    l_tabname = p_table.
+
+    INSERT (l_tabname) FROM TABLE t_tabela_csv.
+
+    COMMIT WORK.
+
+    IF sy-dbcnt = 0.
+      MESSAGE TEXT-005 TYPE 'I'.
+    ELSE.
       MESSAGE TEXT-003 TYPE 'I'.
+    ENDIF.
 
-    CATCH cx_root INTO DATA(lo_exception).
+ CATCH cx_root INTO DATA(lo_exception).
 
       ROLLBACK WORK.
       l_error_message = lo_exception->get_text( ).
-      CONCATENATE TEXT-003
+      CONCATENATE TEXT-005
+                  ' '
                   l_error_message
                   INTO l_message SEPARATED BY space.
       MESSAGE l_message TYPE 'I'.
@@ -252,6 +353,99 @@ FORM zf_inserir_dados_na_tabela.
 
   ENDTRY.
 
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form zf_validar_parametros_export.                                  *
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+FORM zf_validar_parametros_export.
+
+* Verifica se o parâmetro p_path está vazio
+  IF p_path IS INITIAL.
+    MESSAGE 'Selecione um arquivo csv valido.' TYPE 'I'.
+
+* Verifica se o parâmetro p_table está vazio
+  ELSEIF p_table IS INITIAL.
+    MESSAGE 'Digite o nome de uma tabela autorizada para importação de arquivos CSV.' TYPE 'I'.
+
+* Verifica se a tabela é uma tabela z
+  ELSEIF p_table(1) <> 'z' AND p_table(1) <> 'Z'.
+    MESSAGE 'Utilize esse programa apenas em tabelas Z.' TYPE 'I'.
+
+  ELSE.
+
+    PERFORM zf_ler_csv.
+    PERFORM zf_processar_csv.
+    PERFORM zf_exportar_tabela.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form zf_exportar_tabela                                             *
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+FORM zf_exportar_tabela.
+DATA: lt_csv TYPE TABLE OF string,
+          lv_row TYPE string,
+          lv_string  TYPE string.
+
+    "CONSTRUCT THE TARGET TABLE FOR DOWNLOAD.SEPARATE VALUE WITH COMMAS
+    LOOP AT <f_tab> ASSIGNING FIELD-SYMBOL(<fs_line>).
+
+      DO.
+        ASSIGN COMPONENT sy-index OF STRUCTURE <fs_line> TO FIELD-SYMBOL(<fs_value>).
+        IF sy-subrc NE 0.
+          EXIT.
+        ENDIF.
+        IF sy-index EQ 1.
+          lv_row = <fs_value>.
+        ELSE.
+          lv_string = <fs_value>.
+          CONDENSE lv_string.
+          CONCATENATE lv_row lv_string INTO lv_row SEPARATED BY l_field_separator.
+        ENDIF.
+      ENDDO.
+
+      APPEND lv_row TO lt_csv.
+
+    ENDLOOP.
+
+    DATA: export_path TYPE STRING.
+    CONCATENATE p_path '\' p_table '.csv' INTO export_path.
+
+    "DOWNLOAD THE TABLE INTO CSV FILE
+    CALL FUNCTION 'GUI_DOWNLOAD'
+      EXPORTING
+        filename                = export_path
+      TABLES
+        data_tab                = lt_csv
+      EXCEPTIONS
+        file_write_error        = 1
+        no_batch                = 2
+        gui_refuse_filetransfer = 3
+        invalid_type            = 4
+        no_authority            = 5
+        unknown_error           = 6
+        header_not_allowed      = 7
+        separator_not_allowed   = 8
+        filesize_not_allowed    = 9
+        header_too_long         = 10
+        dp_error_create         = 11
+        dp_error_send           = 12
+        dp_error_write          = 13
+        unknown_dp_error        = 14
+        access_denied           = 15
+        dp_out_of_memory        = 16
+        disk_full               = 17
+        dp_timeout              = 18
+        file_not_found          = 19
+        dataprovider_exception  = 20
+        control_flush_error     = 21
+        OTHERS                  = 22.
 ENDFORM.
 
 *&---------------------------------------------------------------------*
@@ -291,7 +485,14 @@ FORM zf_deletar_registros.
       OTHERS                = 2.
 
   IF l_resposta = 1.
-    DELETE FROM ztb_enterprise2.
+
+    IF p_table <> 'ZESTUDO_EMPRESAS'.
+      EXIT.
+    ENDIF.
+
+    DATA: l_tabname TYPE DD02L-TABNAME.
+    l_tabname = p_table.
+    DELETE FROM (l_tabname).
 
     IF sy-dbcnt = 0.
       MESSAGE 'Nenhuma alteração foi realizada na tabela!' TYPE 'I'.
