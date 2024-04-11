@@ -7,7 +7,7 @@
 * Transação       : XXXXXXXXXXXXXXX                                            *
 * Tipo Programa   : XXXXXXXXXXXXXXX                                            *
 * Funcional       : XXXXXXXXXXXXXXX                                            *
-* Desenvolvedor   : XXXXXXXXXXXXXXX                                            *
+* Desenvolvedor   : Argel Capela dos Santos                                    *
 * Data Criação    : XXXXXXXXXXXXXXX                                            *
 *------------------------------------------------------------------------------*
 *                           [HISTÓRICO]                                	       *
@@ -18,51 +18,43 @@
 REPORT zimport_export_csv.
 
 *----------------------------------------------------------------------*
-* Estruturas                                                           *
+* Tabelas Internas                                                     *
 *----------------------------------------------------------------------*
-DATA: y_descricao_estrutura_gerada TYPE REF TO cl_abap_structdescr.
+DATA: t_csv_bruto           TYPE truxs_t_text_data,
+      t_arquivo_selecionado TYPE filetable,
+      t_csv                 TYPE TABLE OF string,
+      t_tabela_gerada       TYPE REF TO data,
+      t_tabela_gerada_final TYPE REF TO data.
 
 *----------------------------------------------------------------------*
-* Tabelas Internas                                                       *
+* Work Areas                                                           *
 *----------------------------------------------------------------------*
-DATA: t_descricao_tabela_gerada      TYPE REF TO cl_abap_tabledescr,
-      t_tabela_csv                   TYPE TABLE OF zestudo_empresas,
-      t_csv_bruto                    TYPE truxs_t_text_data,
-      t_filetable                    TYPE filetable,
-      t_componentes_estrutura_gerada TYPE cl_abap_structdescr=>component_table,
-      t_tabela_gerada                TYPE REF TO data,
-      t_csv                          TYPE TABLE OF string.
-
-*----------------------------------------------------------------------*
-* Work Areas                                                            *
-*----------------------------------------------------------------------*
-DATA: w_tabela_csv             TYPE zestudo_empresas,
-      w_linha_dados_lidos      TYPE REF TO data,
-      w_filetable              LIKE LINE OF t_filetable,
-      w_componentes_estrutura_gerada LIKE LINE OF t_componentes_estrutura_gerada.
+DATA: w_linha_dados_lidos       TYPE REF TO data,
+      w_linha_dados_lidos_final TYPE REF TO data,
+      w_arquivo_selecionado     LIKE LINE OF t_arquivo_selecionado.
 
 *----------------------------------------------------------------------*
 * Variáveis                                                            *
 *----------------------------------------------------------------------*
-DATA: l_finaliza_linhas    TYPE cl_rsda_csv_converter=>char VALUE '"',
-      l_separa_campos      TYPE cl_rsda_csv_converter=>char VALUE ',',
-      l_mensagem           TYPE string,
-      l_mensagem_erro      TYPE string,
-      l_rc                 TYPE i, " código de retorno da seleção do arquivo csv
-      l_resposta           TYPE c,
-      l_tabname            TYPE dd02l-tabname,
-      l_root_exception     TYPE REF TO cx_root,
-      l_nome_tabela        TYPE ddobjname,
-      l_linha_csv          TYPE string,
-      l_campo_csv          TYPE string,
-      l_csv_converter      TYPE REF TO cl_rsda_csv_converter.
+DATA: l_finaliza_linhas TYPE cl_rsda_csv_converter=>char,
+      l_separa_campos   TYPE cl_rsda_csv_converter=>char,
+      l_mensagem        TYPE string,
+      l_mensagem_erro   TYPE string,
+      l_rc              TYPE i,
+      l_resposta        TYPE c,
+      l_nome_tabela     TYPE dd02l-tabname,
+      l_root_exception  TYPE REF TO cx_root,
+      l_linha_csv       TYPE string,
+      l_campo_csv       TYPE string,
+      l_csv_converter   TYPE REF TO cl_rsda_csv_converter.
 
 *----------------------------------------------------------------------*
 * Field-Symbols                                                        *
 *----------------------------------------------------------------------*
-FIELD-SYMBOLS: <f_dados_lidos>       TYPE ANY TABLE,
-               <f_dados_lidos_final> TYPE ANY TABLE,
-               <f_linha_dados_lidos> TYPE any.
+FIELD-SYMBOLS: <f_dados_lidos>             TYPE ANY TABLE,
+               <f_linha_dados_lidos>       TYPE any,
+               <f_dados_lidos_final>       TYPE ANY TABLE,
+               <f_linha_dados_lidos_final> TYPE any.
 
 *----------------------------------------------------------------------*
 * Tela de Seleção                                                      *
@@ -84,14 +76,30 @@ SELECTION-SCREEN END OF BLOCK b2.
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_path.
   IF p_import = 'X'.
     PERFORM zf_abri_selecao_arquivo.
-  ELSE.
+  ELSEIF p_export = 'X'.
     PERFORM zf_abri_selecao_pasta.
   ENDIF.
 
+* Desabilita p_path, se o radiobutton p_erase estiver selecionado
 AT SELECTION-SCREEN OUTPUT.
-* disable checkbox when select erase radio button...
+  IF p_erase = 'X'.
+    LOOP AT SCREEN.
+      IF screen-name = 'P_PATH'.
+        p_path = ''.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
 
 START-OF-SELECTION.
+
+*----------------------------------------------------------------------*
+* Configuração Inicial                                                 *
+*----------------------------------------------------------------------*
+  l_nome_tabela     = p_table.
+  l_finaliza_linhas  = '"'.
+  l_separa_campos   = ','.
 
 *----------------------------------------------------------------------*
 * Execução                                                             *
@@ -109,9 +117,9 @@ START-OF-SELECTION.
 *----------------------------------------------------------------------*
 
 *&---------------------------------------------------------------------*
-*& Form zf_abri_selecao_arquivo                                       *
+*& Form zf_abri_selecao_arquivo                                        *
 *&---------------------------------------------------------------------*
-*&
+*& Abre Janela para seleção de um arquivo no computador.               *
 *&---------------------------------------------------------------------*
 FORM zf_abri_selecao_arquivo.
 
@@ -123,7 +131,7 @@ FORM zf_abri_selecao_arquivo.
           file_filter             = 'CSV Files (*.csv)|*.csv'
           initial_directory       = 'c:\'
         CHANGING
-          file_table              = t_filetable
+          file_table              = t_arquivo_selecionado
           rc                      = l_rc
         EXCEPTIONS
           file_open_dialog_failed = 1
@@ -133,8 +141,8 @@ FORM zf_abri_selecao_arquivo.
           OTHERS                  = 5.
 
       IF sy-subrc = 0.
-        READ TABLE t_filetable INTO w_filetable INDEX 1.
-        p_path = w_filetable-filename.
+        READ TABLE t_arquivo_selecionado INTO w_arquivo_selecionado INDEX 1.
+        p_path = w_arquivo_selecionado-filename.
       ENDIF.
 
     CATCH cx_root INTO l_root_exception.
@@ -149,9 +157,9 @@ FORM zf_abri_selecao_arquivo.
 ENDFORM.
 
 *&---------------------------------------------------------------------*
-*& Form zf_abri_selecao_pasta                                         *
+*& Form zf_abri_selecao_pasta                                          *
 *&---------------------------------------------------------------------*
-*&
+*& Abre janela que permite selecionar uma pasta do computador.         *
 *&---------------------------------------------------------------------*
 FORM zf_abri_selecao_pasta.
 
@@ -163,6 +171,13 @@ FORM zf_abri_selecao_pasta.
           initial_folder  = 'c:\'
         CHANGING
           selected_folder = p_path.
+
+*   Gera um path completo de exportação baseado na pasta selecionada e no nome de tabela informado
+      IF p_table IS NOT INITIAL.
+        CONCATENATE p_path '\' p_table '.csv' INTO p_path.
+      ELSE.
+        CONCATENATE p_path '\tabela_exportada.csv' INTO p_path.
+      ENDIF.
 
     CATCH cx_root INTO l_root_exception.
 
@@ -176,99 +191,11 @@ FORM zf_abri_selecao_pasta.
 ENDFORM.
 
 *&---------------------------------------------------------------------*
-*& Form zf_gera_tabela.                                                *
+*& Form zf_valida_parametros_import.                                   *
 *&---------------------------------------------------------------------*
-*& Gera dinamicamente, uma tabela interna conforme o nome da tabela    *
-*& informado no parâmetro p_table.                                     *
-*&                                                                     *
-*& - tipo_dado -> Pode ser 'string' ou 'clone'.                        *
-*&    - 'string': Gera tabela com todos os elementos como string.      *
-*&    - 'clone' ou qualquer outro valor: Gera tabela identica.         *
-*&---------------------------------------------------------------------*
-FORM zf_gera_tabela USING p_nome_tabela       TYPE STRING
-                          p_tipo_dado         TYPE STRING
-                          p_dados_lidos_final TYPE STRING.
-
- DATA: l_informacoes_tabela TYPE TABLE OF dfies.
-  
-  TRY.
-
-      l_nome_tabela = p_nome_tabela.
-
-*     Verifica se a tabela existe e obtem informações sobre a tabela. (Nome dos campos, elemento de dado, etc.)
-      CALL FUNCTION 'DDIF_FIELDINFO_GET'
-        EXPORTING
-          tabname   = l_nome_tabela                                     " Nome da tabela digitada pelo usuário
-        TABLES
-          dfies_tab = l_informacoes_tabela                              " Tabela para armazenar detalhes dos campos
-        EXCEPTIONS
-          not_found = 1
-          OTHERS    = 2.
-
-      IF sy-subrc = 0.
-
-*       Se a tabela existir. Percorre as informações obtidas e constrói uma estrutura, com base nessa tabela.
-        LOOP AT l_informacoes_tabela INTO DATA(w_informacao_tabela).
-
-          IF w_informacao_tabela-fieldname = 'MANDT'.
-            CONTINUE.
-          ENDIF.
-
-*         Define o nome dos campos da estrutura a ser gerada dinamicamente.
-          w_componentes_estrutura_gerada-name = w_informacao_tabela-fieldname.
-
-          IF p_tipo_dado = 'string'.
-*           Define o elemento de dado dos campos da estrutura a ser gerada como string.
-            w_componentes_estrutura_gerada-type = cl_abap_elemdescr=>get_string( ).
-          ELSE.
-*           Define o elemento de dado dos campos da estrutura a ser gerada,identificos a tabela informada.
-            TRY.
-                w_componentes_estrutura_gerada-type ?= cl_abap_elemdescr=>describe_by_name( w_informacao_tabela-rollname ).
-              CATCH cx_root.
-                w_componentes_estrutura_gerada-type = cl_abap_elemdescr=>get_string( ). " Por padrão, defina como string em caso de falha ao criar o elemento
-            ENDTRY.
-          ENDIF.
-
-          APPEND w_componentes_estrutura_gerada TO t_componentes_estrutura_gerada.
-
-        ENDLOOP.
-
-*       Cria a descrição para a criação de uma estrutura dinamicamente, na tabela de descricao de componentes da estrutura..
-        y_descricao_estrutura_gerada = cl_abap_structdescr=>create( t_componentes_estrutura_gerada ).
-
-*       Cria a descrição para a criação de uma tabela interna dinamicamente, com base na estrutura gerada anteriormente.
-        t_descricao_tabela_gerada = cl_abap_tabledescr=>create( p_line_type = y_descricao_estrutura_gerada
-                                                                p_table_kind = cl_abap_tabledescr=>tablekind_std
-                                                                p_unique = abap_false ).
-
-*       Cria uma tabela interna dinamicamente, com base na descricao da tabela, gerada anteriormente.
-        CREATE DATA t_tabela_gerada TYPE HANDLE t_descricao_tabela_gerada.
-
-*       Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
-        ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.       
-
-      ELSE.
-        MESSAGE 'Tabela Inválida!' TYPE 'I'.
-      ENDIF.
-
-    CATCH cx_root INTO l_root_exception.
-
-      CLEAR l_mensagem_erro.
-      l_mensagem_erro = l_root_exception->get_text( ).
-      CONCATENATE 'Erro ao processar a tabela informada: ' l_mensagem_erro  INTO l_mensagem_erro.
-      MESSAGE l_mensagem_erro TYPE 'I'.
-
-  ENDTRY.
-
-ENDFORM.
-
-
-*&---------------------------------------------------------------------*
-*& Form zf_valida_parametros_import.                                  *
-*&---------------------------------------------------------------------*
-*& Valida se os parâmetros da tela de seleção (p_table e p_path)
-*& estão preenchidos corretamente, antes de tentar importar um arquivo
-*& csv.
+*& Valida se os parâmetros da tela de seleção (p_table e p_path)       *
+*& estão preenchidos corretamente, antes de tentar importar um arquivo *
+*& csv.                                                                *
 *&---------------------------------------------------------------------*
 FORM zf_valida_parametros_import.
 
@@ -285,20 +212,34 @@ FORM zf_valida_parametros_import.
     MESSAGE 'Utilize esse programa apenas em tabelas Z.' TYPE 'I'.
 
   ELSE.
-    PERFORM zf_gera_tabela USING p_table 'string' 'z'.
     PERFORM zf_le_csv.
+
   ENDIF.
 
 ENDFORM.
 
 *&---------------------------------------------------------------------*
-*& Form zf_le_csv                                                     *
+*& Form zf_le_csv                                                      *
 *&---------------------------------------------------------------------*
-*&
+*& Carrega o arquivo CSV que foi informado no parâmetro p_path         *
+*& e cria uma tabela interna em que cada registro é uma linha desse    *
+*& arquivo. Também gera uma tabela interna do tipo da tabela informada *
+*& no parâmetro p_table, dinamicamente, em preparação para o proce-    *
+*& ssamento do CSV.                                                    *
 *&---------------------------------------------------------------------*
 FORM zf_le_csv.
 
   TRY.
+*   Gera dinamicamente, uma tabela interna, com o nome que foi informado no parâmetro p_table.
+      CALL FUNCTION 'ZF_GERA_TABELA'
+        EXPORTING
+          p_nome_tabela   = p_table
+          p_tipo_dado     = 'string'
+        CHANGING
+          t_tabela_gerada = t_tabela_gerada.
+
+*     Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+      ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
 
 *   Cria dinamicamente a variável w_linha_dados_lidos, que representa uma linha da tabela interna, apontada por <f_dados_lidos>.
       CREATE DATA w_linha_dados_lidos LIKE LINE OF <f_dados_lidos>.
@@ -380,33 +321,45 @@ ENDFORM.
 *&---------------------------------------------------------------------*
 *& Form zf_insere_dados_tabela                                         *
 *&---------------------------------------------------------------------*
-*&
+*& Insere os dados do arquivo CSV no banco de dados.                   *
 *&---------------------------------------------------------------------*
 FORM zf_insere_dados_tabela.
 
   TRY.
-    
-*      zf_gera_tabela
-    
 
+*   Gera tabela interna identica a tabela informada no parâmetro p_table
+      CALL FUNCTION 'ZF_GERA_TABELA'
+        EXPORTING
+          p_nome_tabela   = p_table
+          p_tipo_dado     = 'final'
+        CHANGING
+          t_tabela_gerada = t_tabela_gerada_final.
+
+*     Passa a referência da tabela gerada, para o ponteiro(Field-Symbol) <f_dados_lidos_final>
+      ASSIGN t_tabela_gerada_final->* TO <f_dados_lidos_final>.
+
+*     Cria um Work Area, que é a estrutura da tabela interna t_tabela_gerada_final.
+      CREATE DATA w_linha_dados_lidos LIKE LINE OF <f_dados_lidos_final>.
+
+*     Passa a referência da estrutura criada anteriormente para o ponteiro(Field-Symbol) <f_linha_dados_lidos_final>
+      ASSIGN w_linha_dados_lidos->* TO <f_linha_dados_lidos_final>.
+
+*     Transfere os dados da tabela interna de strings: t_tabela_gerada(<f_dados_lidos>). Para a tabela interna: t_tabela_gerada_final(<f_dados_lidos_final>).
+*      Convertendo os dados de String para os tipos de dados originais da tabela informada no parâmetro p_table, se necessário.
       LOOP AT <f_dados_lidos> ASSIGNING <f_linha_dados_lidos>.
 
-        MOVE-CORRESPONDING <f_linha_dados_lidos> TO w_tabela_csv.
-        APPEND w_tabela_csv TO t_tabela_csv.
+        MOVE-CORRESPONDING <f_linha_dados_lidos> TO <f_linha_dados_lidos_final>.
+        INSERT <f_linha_dados_lidos_final> INTO TABLE <f_dados_lidos_final>.
 
       ENDLOOP.
 
-      IF p_table <> 'ZESTUDO_EMPRESAS'.
-        EXIT.
-      ENDIF.
+*     Insere a tabela interna, que contem os dados do arquivo CSV, na tabela transparente que foi informada em p_table. Concluindo a importação.
+      INSERT (l_nome_tabela) FROM TABLE <f_dados_lidos_final>.
 
-
-      l_tabname = p_table.
-
-      INSERT (l_tabname) FROM TABLE t_tabela_csv.
-
+*     Confirma as alterações no Banco de Dados.
       COMMIT WORK.
 
+*     Mensagens de sucesso ou de erro
       IF sy-dbcnt = 0.
         MESSAGE TEXT-005 TYPE 'I'.
       ELSE.
@@ -415,6 +368,7 @@ FORM zf_insere_dados_tabela.
 
     CATCH cx_root INTO l_root_exception.
 
+*     Cancela as alterações no banco de dados. Caso alguma excessão ocorra.
       ROLLBACK WORK.
 
       CLEAR l_mensagem_erro.
@@ -429,7 +383,9 @@ ENDFORM.
 *&---------------------------------------------------------------------*
 *& Form zf_valida_parametros_export.                                   *
 *&---------------------------------------------------------------------*
-*&
+*& Valida se os parâmetros da tela de seleção (p_table e p_path)       *
+*& estão preenchidos corretamente, antes de tentar exportar uma        *
+*& tabela transparente.                                                *
 *&---------------------------------------------------------------------*
 FORM zf_valida_parametros_export.
 
@@ -446,49 +402,67 @@ FORM zf_valida_parametros_export.
     MESSAGE 'Utilize esse programa apenas em tabelas Z.' TYPE 'I'.
 
   ELSE.
-    PERFORM zf_gera_tabela USING p_table 'clone' 'z'.
     PERFORM zf_exporta_tabela.
+
   ENDIF.
 
 ENDFORM.
 
 *&---------------------------------------------------------------------*
-*& Form zf_exporta_tabela                                             *
+*& Form zf_exporta_tabela                                              *
 *&---------------------------------------------------------------------*
-*&
+*& Exporta os dados de uma tabela transparente para um arquivo CSV.    *
 *&---------------------------------------------------------------------*
 FORM zf_exporta_tabela.
 
   TRY.
 
-      l_tabname = p_table.
+*   Gera tabela interna, com a estrutura da tabela informada em p_table. Em preparação para a exportação.
+      CALL FUNCTION 'ZF_GERA_TABELA'
+        EXPORTING
+          p_nome_tabela   = p_table
+          p_tipo_dado     = 'clone'
+        CHANGING
+          t_tabela_gerada = t_tabela_gerada.
 
+*     Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+      ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
+
+*     Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
       SELECT *
-        FROM (l_tabname)
+        FROM (l_nome_tabela)
         INTO CORRESPONDING FIELDS OF TABLE <f_dados_lidos>.
 
-      "CONSTRUCT THE TARGET TABLE FOR DOWNLOAD.SEPARATE VALUE WITH COMMAS
-      LOOP AT <f_dados_lidos> ASSIGNING FIELD-SYMBOL(<fs_line>).
+*     Percorre a tabela interna gerada e cria uma tabela interna de strings, t_csv. O loop transforma para registro em uma string, com os valores dos campos separados
+*      pelo caractere separador.
+      LOOP AT <f_dados_lidos> ASSIGNING <f_linha_dados_lidos>.
 
         DO.
-          ASSIGN COMPONENT sy-index OF STRUCTURE <fs_line> TO FIELD-SYMBOL(<fs_value>).
-          IF sy-subrc NE 0.
+*
+          ASSIGN COMPONENT sy-index OF STRUCTURE <f_linha_dados_lidos> TO FIELD-SYMBOL(<f_campo>).
+
+*         Se registro não tem mais campos. Sai do loop e parte para o próximo registro da tabela.
+          IF sy-subrc <> 0.
             EXIT.
           ENDIF.
-          IF sy-index EQ 1.
-            l_linha_csv = <fs_value>.
+
+*         Se for o primeiro campo do registro. Apenas atribua seu valor na variável l_linha_csv.
+          IF sy-index = 1.
+            l_linha_csv = <f_campo>.
+*         Se não for o primeiro campo, concatena o valor que já existe na l_linha_csv com o valor do próximo campo do registro, separado por um caracter separador.
           ELSE.
-            l_campo_csv = <fs_value>.
+            l_campo_csv = <f_campo>.
             CONDENSE l_campo_csv.
             CONCATENATE l_linha_csv l_campo_csv INTO l_linha_csv SEPARATED BY l_separa_campos.
           ENDIF.
+
         ENDDO.
 
         APPEND l_linha_csv TO t_csv.
 
       ENDLOOP.
 
-      "DOWNLOAD THE TABLE INTO CSV FILE
+*     Cria o arquivo CSV com base na tabela interna t_csv montada anteriormente. E baixa o arquivo CSV no diretório informado no parâmetro p_path.
       CALL FUNCTION 'GUI_DOWNLOAD'
         EXPORTING
           filename                = p_path
@@ -519,7 +493,7 @@ FORM zf_exporta_tabela.
           OTHERS                  = 22.
 
 *      CLEAR l_mensagem.
-*      CONCATENATE 'Tabela' p_table 'foi exportada com sucesso.' INTO l_mensagem SEPARATED BY ' '.
+*      CONCATENATE 'Tabela' p_table ' exportada com sucesso.' INTO l_mensagem SEPARATED BY ' '.
 *      MESSAGE l_mensagem TYPE 'I'.
 
     CATCH cx_root INTO l_root_exception.
@@ -534,29 +508,33 @@ FORM zf_exporta_tabela.
 ENDFORM.
 
 *&---------------------------------------------------------------------*
-*& Form zf_valida_parametros_erase.                                  *
+*& Form zf_valida_parametros_erase.                                    *
 *&---------------------------------------------------------------------*
-*&
+*& Valida se o parâmetro p_table está preenchido corretamente. Antes   *
+*& de tentar deletar os registros de uma tabela transparente.          *
 *&---------------------------------------------------------------------*
 FORM zf_valida_parametros_erase.
 
   IF p_table IS INITIAL OR ( p_table(1) <> 'z' AND p_table(1) <> 'Z' ) .
-    MESSAGE 'Digite o nome de uma tabela z existente e segura para deletar os registros.' TYPE 'I'.
+    MESSAGE 'Digite o nome de uma tabela z existente, e segura para deletar os registros.' TYPE 'I'.
+
   ELSE.
     PERFORM zf_deleta_registros.
+
   ENDIF.
 
 ENDFORM.
 
 *&---------------------------------------------------------------------*
-*& Form zf_deleta_registros                                           *
+*& Form zf_deleta_registros                                            *
 *&---------------------------------------------------------------------*
-*&
+*& Deleta os registros de uma tabela transparente autorizada.          *
 *&---------------------------------------------------------------------*
 FORM zf_deleta_registros.
 
   CONCATENATE 'Deseja realmente excluir os registros da tabela' p_table '?' INTO l_mensagem SEPARATED BY ' '.
 
+* Chama função para exibir mensagem de confirmação na tela.
   CALL FUNCTION 'POPUP_TO_CONFIRM'
     EXPORTING
       titlebar              = 'Resetar Tabela'
@@ -573,12 +551,8 @@ FORM zf_deleta_registros.
 
   IF l_resposta = 1.
 
-    IF p_table <> 'ZESTUDO_EMPRESAS'.
-      EXIT.
-    ENDIF.
-
-    l_tabname = p_table.
-    DELETE FROM (l_tabname).
+*   Deleta todos os registros da tabela informada no parâmetro p_table.
+    DELETE FROM (l_nome_tabela).
 
     IF sy-dbcnt = 0.
       MESSAGE 'Nenhuma alteração foi realizada na tabela!' TYPE 'I'.
