@@ -20,51 +20,53 @@ REPORT zimport_export_csv.
 *----------------------------------------------------------------------*
 * Tabelas Internas                                                     *
 *----------------------------------------------------------------------*
-DATA: t_csv_bruto           TYPE truxs_t_text_data,
-      t_arquivo_selecionado TYPE filetable,
-      t_csv                 TYPE TABLE OF string,
-      t_tabela_gerada       TYPE REF TO data,
-      t_tabela_gerada_final TYPE REF TO data.
+DATA:          t_csv_bruto                 TYPE truxs_t_text_data,              " Armazena as linhas do arquivo CSV depois de ler
+               t_arquivo_selecionado       TYPE filetable,                      " Armazena os arquivos selecionados pelo seletor de arquivos do parâmetro p_path
+               t_csv                       TYPE TABLE OF string,                " Armazena linhas do arquivo csv, em preparação para exportação.
+               t_tabela_gerada             TYPE REF TO data,                    " Tabela interna gerada dinamicamente
+               t_tabela_gerada_final       TYPE REF TO data.                    " Tabela interna gerada dinamicamente
 
 *----------------------------------------------------------------------*
 * Work Areas                                                           *
 *----------------------------------------------------------------------*
-DATA: w_linha_dados_lidos       TYPE REF TO data,
-      w_linha_dados_lidos_final TYPE REF TO data,
-      w_arquivo_selecionado     LIKE LINE OF t_arquivo_selecionado.
+DATA:          w_linha_dados_lidos         TYPE REF TO data,                    " Ajuda a percorrer registros da tabela interna gerada dinamicamente
+               w_linha_dados_lidos_final   TYPE REF TO data,                    " Ajuda a percorrer registros da tabela interna gerada dinamicamente
+               w_arquivo_selecionado       LIKE LINE OF t_arquivo_selecionado.  " Armazena da tabela de arquivos selecionados pelo seletor de arquivos
 
 *----------------------------------------------------------------------*
 * Variáveis                                                            *
 *----------------------------------------------------------------------*
-DATA: l_finaliza_linhas TYPE cl_rsda_csv_converter=>char VALUE '"',
-      l_separa_campos   TYPE cl_rsda_csv_converter=>char VALUE ',',
-      l_mensagem        TYPE string,
-      l_mensagem_erro   TYPE string,
-      l_rc              TYPE i,
-      l_resposta        TYPE c,
-      l_nome_tabela     TYPE dd02l-tabname,
-      l_root_exception  TYPE REF TO cx_root,
-      l_linha_csv       TYPE string,
-      l_campo_csv       TYPE string,
-      l_csv_converter   TYPE REF TO cl_rsda_csv_converter,
-      l_salv_table      TYPE REF TO cl_salv_table.
+DATA:          l_delimita_linhas           TYPE cl_rsda_csv_converter=>char,    " Define o caractere delimitador do conversor csv
+               l_separa_campos             TYPE cl_rsda_csv_converter=>char,    " Define o caractere separador do conversor csv
+               l_mensagem                  TYPE string,                         " Usado na concatenação de mensagens
+               l_mensagem_erro             TYPE string,                         " Usado para extrair mensagens de erro das exceções capturadas TryCatch
+               l_rc                        TYPE i,                              " Armazena código de retorno
+               l_resposta                  TYPE c,                              " Armazena resposta da caixa de confirmação ao tentar deletar registro
+               l_nome_tabela               TYPE dd02l-tabname,                  " Define o nome da tabela nos comandos ABAP SQL  (Insert, Delete From... etc). Sem ser do tipo dd021, não funciona
+               l_root_exception            TYPE REF TO cx_root,                 " Armazena excessões do tipo cx_root
+               l_linha_csv                 TYPE string,                         " Armazena linha do arquivo csv, em preparação para exportação.
+               l_campo_csv                 TYPE string,                         " Armazena campo da linha csv, em preparação para exportação.
+               l_csv_converter             TYPE REF TO cl_rsda_csv_converter,   " Objeto conversor de string csv para estrutura
+               l_salv_table                TYPE REF TO cl_salv_table.           " Ajuda a gerar o relatório ALV da tabela
 
 *----------------------------------------------------------------------*
 * Field-Symbols                                                        *
 *----------------------------------------------------------------------*
-FIELD-SYMBOLS: <f_dados_lidos>             TYPE ANY TABLE,
-               <f_linha_dados_lidos>       TYPE any,
-               <f_dados_lidos_final>       TYPE ANY TABLE,
-               <f_linha_dados_lidos_final> TYPE any.
+FIELD-SYMBOLS: <f_dados_lidos>             TYPE ANY TABLE,                      " Usado para acessar tabela interna gerada dinamicamente
+               <f_dados_lidos_final>       TYPE ANY TABLE,                      " Usado para acessar tabela interna gerada dinamicamente
+               <f_linha_dados_lidos>       TYPE any,                            " Usado para acessar linha da tabela dinamica
+               <f_linha_dados_lidos_final> TYPE any.                            " Usado para acessar linha da tabela dinamica
 
 *----------------------------------------------------------------------*
 * Tela de Seleção                                                      *
 *----------------------------------------------------------------------*
+* Define as caixas de texto da tela de seleção
 SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
   PARAMETERS: p_path  TYPE string,
               p_table TYPE string.
 SELECTION-SCREEN END OF BLOCK b1.
 
+* Define as opções RadioButton da tela de seleção
 SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
   PARAMETERS: p_import RADIOBUTTON GROUP rad DEFAULT 'X' USER-COMMAND zm_muda_seletor.
   SELECTION-SCREEN COMMENT /1(66) TEXT-003.
@@ -101,7 +103,7 @@ START-OF-SELECTION.
 * Configuração Inicial                                                 *
 *----------------------------------------------------------------------*
   l_nome_tabela     = p_table.
-  l_finaliza_linhas  = '"'.
+  l_delimita_linhas  = '"'.
   l_separa_campos   = ','.
 
 *----------------------------------------------------------------------*
@@ -177,7 +179,7 @@ FORM zf_abri_selecao_pasta.
         CHANGING
           selected_folder = p_path.
 
-*   Gera um path completo de exportação baseado na pasta selecionada e no nome de tabela informado
+*     Gera um path completo de exportação baseado na pasta selecionada e no nome de tabela informado
       IF p_table IS NOT INITIAL.
         CONCATENATE p_path '\' p_table '.csv' INTO p_path.
       ELSE.
@@ -235,7 +237,7 @@ ENDFORM.
 FORM zf_le_csv.
 
   TRY.
-*   Gera dinamicamente, uma tabela interna, com o nome que foi informado no parâmetro p_table.
+*     Gera dinamicamente, uma tabela interna, com o nome que foi informado no parâmetro p_table.
       CALL FUNCTION 'ZF_GERA_TABELA'
         EXPORTING
           p_nome_tabela   = p_table
@@ -246,7 +248,7 @@ FORM zf_le_csv.
           OTHERS          = 1.
 
       IF sy-subrc = 0.
-*         Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+*       Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
         ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
 
 *       Cria dinamicamente a variável w_linha_dados_lidos, que representa uma linha da tabela interna, apontada por <f_dados_lidos>.
@@ -296,7 +298,7 @@ FORM zf_processa_csv.
 
   TRY.
 *     Cria uma variável para conversão de CSV. Define os caracteres de separação entre campos, e finalização de cada linha.
-      l_csv_converter = cl_rsda_csv_converter=>create( i_delimiter = l_finaliza_linhas
+      l_csv_converter = cl_rsda_csv_converter=>create( i_delimiter = l_delimita_linhas
                                                        i_separator = l_separa_campos ).
 
       IF sy-subrc = 0.
@@ -343,7 +345,7 @@ FORM zf_insere_dados_tabela.
 
   TRY.
 
-*   Gera tabela interna identica a tabela informada no parâmetro p_table
+*     Gera tabela interna identica a tabela informada no parâmetro p_table
       CALL FUNCTION 'ZF_GERA_TABELA'
         EXPORTING
           p_nome_tabela   = p_table
@@ -434,7 +436,7 @@ FORM zf_exporta_tabela.
 
   TRY.
 
-*   Gera tabela interna, com a estrutura da tabela informada em p_table. Em preparação para a exportação.
+*     Gera tabela interna, com a estrutura da tabela informada em p_table. Em preparação para a exportação.
       CALL FUNCTION 'ZF_GERA_TABELA'
         EXPORTING
           p_nome_tabela   = p_table
@@ -446,28 +448,28 @@ FORM zf_exporta_tabela.
 
       IF sy-subrc = 0.
 
-*         Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+*       Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
         ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
 
-*         Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
+*       Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
         SELECT *
           FROM (l_nome_tabela)
           INTO CORRESPONDING FIELDS OF TABLE <f_dados_lidos>.
 
-*         Percorre a tabela interna gerada e cria uma tabela interna de strings, t_csv. O loop transforma para registro em uma string, com os valores dos campos separados
-*          pelo caractere separador.
+*       Percorre a tabela interna gerada e cria uma tabela interna de strings, t_csv. O loop transforma para registro em uma string, com os valores dos campos separados
+*       pelo caractere separador.
         LOOP AT <f_dados_lidos> ASSIGNING <f_linha_dados_lidos>.
 
           DO.
 *
             ASSIGN COMPONENT sy-index OF STRUCTURE <f_linha_dados_lidos> TO FIELD-SYMBOL(<f_campo>).
 
-*             Se registro não tem mais campos. Sai do loop e parte para o próximo registro da tabela.
+*           Se registro não tem mais campos. Sai do loop e parte para o próximo registro da tabela.
             IF sy-subrc <> 0.
               EXIT.
             ENDIF.
 
-*             Se campo for uma string com virgula, coloca entre parenteses
+*           Se campo for uma string com virgula, coloca entre parenteses
             CLEAR l_campo_csv.
             l_campo_csv = <f_campo>.
             IF l_campo_csv CA sy-abcde.
@@ -480,10 +482,10 @@ FORM zf_exporta_tabela.
               ENDIF.
             ENDIF.
 
-*             Se for o primeiro campo do registro. Apenas atribua seu valor na variável l_linha_csv.
+*           Se for o primeiro campo do registro. Apenas atribua seu valor na variável l_linha_csv.
             IF sy-index = 1.
               l_linha_csv = l_campo_csv.
-*             Se não for o primeiro campo, concatena o valor que já existe na l_linha_csv com o valor do próximo campo do registro, separado por um caracter separador.
+*           Se não for o primeiro campo, concatena o valor que já existe na l_linha_csv com o valor do próximo campo do registro, separado por um caracter separador.
             ELSE.
               CONDENSE l_campo_csv.
               CONCATENATE l_linha_csv l_campo_csv INTO l_linha_csv SEPARATED BY l_separa_campos.
@@ -495,35 +497,14 @@ FORM zf_exporta_tabela.
 
         ENDLOOP.
 
-*         Cria o arquivo CSV com base na tabela interna t_csv montada anteriormente. E baixa o arquivo CSV no diretório informado no parâmetro p_path.
+*       Cria o arquivo CSV com base na tabela interna t_csv montada anteriormente. E baixa o arquivo CSV no diretório informado no parâmetro p_path.
         CALL FUNCTION 'GUI_DOWNLOAD'
           EXPORTING
             filename                = p_path
           TABLES
             data_tab                = t_csv
           EXCEPTIONS
-            file_write_error        = 1
-            no_batch                = 2
-            gui_refuse_filetransfer = 3
-            invalid_type            = 4
-            no_authority            = 5
-            unknown_error           = 6
-            header_not_allowed      = 7
-            separator_not_allowed   = 8
-            filesize_not_allowed    = 9
-            header_too_long         = 10
-            dp_error_create         = 11
-            dp_error_send           = 12
-            dp_error_write          = 13
-            unknown_dp_error        = 14
-            access_denied           = 15
-            dp_out_of_memory        = 16
-            disk_full               = 17
-            dp_timeout              = 18
-            file_not_found          = 19
-            dataprovider_exception  = 20
-            control_flush_error     = 21
-            OTHERS                  = 22.
+            OTHERS                  = 1.
 
         IF sy-subrc = 0.
           CLEAR l_mensagem.
@@ -625,15 +606,15 @@ FORM zf_exibe_tabela.
 
         IF sy-subrc = 0.
 
-*             Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+*         Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
           ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
 
-*             Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
+*         Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
           SELECT *
             FROM (l_nome_tabela)
             INTO CORRESPONDING FIELDS OF TABLE <f_dados_lidos>.
 
-*             Executa ALV tendo como dados a tabela criada dinamicamente os dados
+*         Executa ALV tendo como dados a tabela criada dinamicamente os dados
           cl_salv_table=>factory(
             IMPORTING
               r_salv_table = l_salv_table
