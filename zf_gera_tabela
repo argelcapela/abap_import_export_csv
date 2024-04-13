@@ -89,7 +89,8 @@ FUNCTION zf_gera_tabela.
     CREATE DATA t_tabela_gerada TYPE HANDLE t_descricao_tabela_gerada.
 
   ELSE.
-*    RAISE EXCEPTION zfgte_tabela_invalida.
+    MESSAGE 'Tabela Inválida' TYPE 'I'.
+    RAISE ZFGTE_TABELA_INVALIDA.
   ENDIF.
 
 ENDFUNCTION.

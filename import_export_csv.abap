@@ -36,8 +36,8 @@ DATA: w_linha_dados_lidos       TYPE REF TO data,
 *----------------------------------------------------------------------*
 * Variáveis                                                            *
 *----------------------------------------------------------------------*
-DATA: l_finaliza_linhas TYPE cl_rsda_csv_converter=>char,
-      l_separa_campos   TYPE cl_rsda_csv_converter=>char,
+DATA: l_finaliza_linhas TYPE cl_rsda_csv_converter=>char VALUE '"',
+      l_separa_campos   TYPE cl_rsda_csv_converter=>char VALUE ',',
       l_mensagem        TYPE string,
       l_mensagem_erro   TYPE string,
       l_rc              TYPE i,
@@ -46,7 +46,8 @@ DATA: l_finaliza_linhas TYPE cl_rsda_csv_converter=>char,
       l_root_exception  TYPE REF TO cx_root,
       l_linha_csv       TYPE string,
       l_campo_csv       TYPE string,
-      l_csv_converter   TYPE REF TO cl_rsda_csv_converter.
+      l_csv_converter   TYPE REF TO cl_rsda_csv_converter,
+      l_salv_table      TYPE REF TO cl_salv_table.
 
 *----------------------------------------------------------------------*
 * Field-Symbols                                                        *
@@ -65,11 +66,13 @@ SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
 SELECTION-SCREEN END OF BLOCK b1.
 
 SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
-  PARAMETERS:
-    p_import RADIOBUTTON GROUP rad DEFAULT 'X' USER-COMMAND zm_muda_seletor,
-    p_export RADIOBUTTON GROUP rad.
+  PARAMETERS: p_import RADIOBUTTON GROUP rad DEFAULT 'X' USER-COMMAND zm_muda_seletor.
+  SELECTION-SCREEN COMMENT /1(66) TEXT-003.
+  PARAMETERS: p_export RADIOBUTTON GROUP rad.
+  SELECTION-SCREEN COMMENT /1(66) TEXT-004.
   PARAMETERS: p_erase  RADIOBUTTON GROUP rad.
-  SELECTION-SCREEN COMMENT /1(60) TEXT-007.
+  SELECTION-SCREEN COMMENT /1(66) TEXT-005.
+  PARAMETERS: p_alv  RADIOBUTTON GROUP rad.
 SELECTION-SCREEN END OF BLOCK b2.
 
 * Ativa o Seletor de Arquivo/Pasta para o parâmetro p_path
@@ -82,7 +85,7 @@ AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_path.
 
 * Desabilita p_path, se o radiobutton p_erase estiver selecionado
 AT SELECTION-SCREEN OUTPUT.
-  IF p_erase = 'X'.
+  IF p_erase = 'X' OR p_alv = 'X'.
     LOOP AT SCREEN.
       IF screen-name = 'P_PATH'.
         p_path = ''.
@@ -108,8 +111,10 @@ START-OF-SELECTION.
     PERFORM zf_valida_parametros_import.
   ELSEIF p_export = 'X'.
     PERFORM zf_valida_parametros_export.
-  ELSE.
+  ELSEIF p_erase = 'X'.
     PERFORM zf_valida_parametros_erase.
+  ELSEIF p_alv = 'X'.
+    PERFORM zf_exibe_tabela.
   ENDIF.
 
 *----------------------------------------------------------------------*
@@ -149,7 +154,7 @@ FORM zf_abri_selecao_arquivo.
 
       CLEAR l_mensagem_erro.
       l_mensagem_erro = l_root_exception->get_text( ).
-      CONCATENATE 'Erro ao tentar selecionar arquivo: ' l_mensagem_erro  INTO l_mensagem_erro.
+      CONCATENATE TEXT-006 l_mensagem_erro  INTO l_mensagem_erro.
       MESSAGE l_mensagem_erro TYPE 'I'.
 
   ENDTRY.
@@ -167,7 +172,7 @@ FORM zf_abri_selecao_pasta.
 
       CALL METHOD cl_gui_frontend_services=>directory_browse
         EXPORTING
-          window_title    = 'Selecionar diretório de exportação'
+          window_title    = 'Selecionar diretório de exportação.'
           initial_folder  = 'c:\'
         CHANGING
           selected_folder = p_path.
@@ -183,7 +188,7 @@ FORM zf_abri_selecao_pasta.
 
       CLEAR l_mensagem_erro.
       l_mensagem_erro = l_root_exception->get_text( ).
-      CONCATENATE 'Erro ao tentar selecionar pasta: ' l_mensagem_erro  INTO l_mensagem_erro.
+      CONCATENATE TEXT-007 l_mensagem_erro  INTO l_mensagem_erro.
       MESSAGE l_mensagem_erro TYPE 'I'.
 
   ENDTRY.
@@ -201,15 +206,15 @@ FORM zf_valida_parametros_import.
 
 * Verifica se o parâmetro p_path está vazio
   IF p_path IS INITIAL.
-    MESSAGE 'Selecione um arquivo csv valido.' TYPE 'I'.
+    MESSAGE TEXT-008 TYPE 'I'.
 
 * Verifica se o parâmetro p_table está vazio
   ELSEIF p_table IS INITIAL.
-    MESSAGE 'Digite o nome de uma tabela autorizada para importação de arquivos CSV.' TYPE 'I'.
+    MESSAGE TEXT-009 TYPE 'I'.
 
 * Verifica se a tabela é uma tabela z
   ELSEIF p_table(1) <> 'z' AND p_table(1) <> 'Z'.
-    MESSAGE 'Utilize esse programa apenas em tabelas Z.' TYPE 'I'.
+    MESSAGE TEXT-010 TYPE 'I'.
 
   ELSE.
     PERFORM zf_le_csv.
@@ -236,32 +241,43 @@ FORM zf_le_csv.
           p_nome_tabela   = p_table
           p_tipo_dado     = 'string'
         CHANGING
-          t_tabela_gerada = t_tabela_gerada.
+          t_tabela_gerada = t_tabela_gerada
+        EXCEPTIONS
+          OTHERS          = 1.
 
-*     Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
-      ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
+      IF sy-subrc = 0.
+*         Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+        ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
 
-*   Cria dinamicamente a variável w_linha_dados_lidos, que representa uma linha da tabela interna, apontada por <f_dados_lidos>.
-      CREATE DATA w_linha_dados_lidos LIKE LINE OF <f_dados_lidos>.
+*       Cria dinamicamente a variável w_linha_dados_lidos, que representa uma linha da tabela interna, apontada por <f_dados_lidos>.
+        CREATE DATA w_linha_dados_lidos LIKE LINE OF <f_dados_lidos>.
 
-*   Cria uma referência para a variável w_linha_dados_lidos, no field-symbol f_linha_dados_lidos.
-      ASSIGN w_linha_dados_lidos->* TO <f_linha_dados_lidos>.
+*       Cria uma referência para a variável w_linha_dados_lidos, no field-symbol f_linha_dados_lidos.
+        ASSIGN w_linha_dados_lidos->* TO <f_linha_dados_lidos>.
 
-*   Carrega o arquivo csv do PC para o SAP. Cria uma tabela interna, em que cada registro dessa tabela, representa uma linha do arquivo CSV. Sem nenhum separação por enquanto.
-      CALL FUNCTION 'GUI_UPLOAD'
-        EXPORTING
-          filename = p_path
-          filetype = 'ASC'
-        TABLES
-          data_tab = t_csv_bruto.
+*       Carrega o arquivo csv do PC para o SAP. Cria uma tabela interna, em que cada registro dessa tabela, representa uma linha do arquivo CSV. Sem nenhum separação por enquanto.
+        CALL FUNCTION 'GUI_UPLOAD'
+          EXPORTING
+            filename = p_path
+            filetype = 'ASC'
+          TABLES
+            data_tab = t_csv_bruto
+          EXCEPTIONS
+            OTHERS   = 1.
 
-      PERFORM zf_processa_csv.
+        IF sy-subrc = 0.
+          PERFORM zf_processa_csv.
+        ELSE.
+          MESSAGE TEXT-011 TYPE 'I'.
+        ENDIF.
+
+      ENDIF.
 
     CATCH cx_root INTO l_root_exception.
 
       CLEAR l_mensagem_erro.
       l_mensagem_erro = l_root_exception->get_text( ).
-      CONCATENATE 'Arquivo CSV inválido: ' l_mensagem_erro  INTO l_mensagem_erro.
+      CONCATENATE TEXT-012 l_mensagem_erro  INTO l_mensagem_erro.
       MESSAGE l_mensagem_erro TYPE 'I'.
 
   ENDTRY.
@@ -311,7 +327,7 @@ FORM zf_processa_csv.
 
       CLEAR l_mensagem_erro.
       l_mensagem_erro = l_root_exception->get_text( ).
-      CONCATENATE 'Erro ao processar CSV: ' l_mensagem_erro  INTO l_mensagem_erro.
+      CONCATENATE TEXT-013 l_mensagem_erro  INTO l_mensagem_erro.
       MESSAGE l_mensagem_erro TYPE 'I'.
 
   ENDTRY.
@@ -333,37 +349,42 @@ FORM zf_insere_dados_tabela.
           p_nome_tabela   = p_table
           p_tipo_dado     = 'final'
         CHANGING
-          t_tabela_gerada = t_tabela_gerada_final.
+          t_tabela_gerada = t_tabela_gerada_final
+        EXCEPTIONS
+          OTHERS          = 1.
 
-*     Passa a referência da tabela gerada, para o ponteiro(Field-Symbol) <f_dados_lidos_final>
-      ASSIGN t_tabela_gerada_final->* TO <f_dados_lidos_final>.
+      IF sy-subrc = 0.
 
-*     Cria um Work Area, que é a estrutura da tabela interna t_tabela_gerada_final.
-      CREATE DATA w_linha_dados_lidos LIKE LINE OF <f_dados_lidos_final>.
+*       Passa a referência da tabela gerada, para o ponteiro(Field-Symbol) <f_dados_lidos_final>
+        ASSIGN t_tabela_gerada_final->* TO <f_dados_lidos_final>.
 
-*     Passa a referência da estrutura criada anteriormente para o ponteiro(Field-Symbol) <f_linha_dados_lidos_final>
-      ASSIGN w_linha_dados_lidos->* TO <f_linha_dados_lidos_final>.
+*       Cria um Work Area, que é a estrutura da tabela interna t_tabela_gerada_final.
+        CREATE DATA w_linha_dados_lidos LIKE LINE OF <f_dados_lidos_final>.
 
-*     Transfere os dados da tabela interna de strings: t_tabela_gerada(<f_dados_lidos>). Para a tabela interna: t_tabela_gerada_final(<f_dados_lidos_final>).
-*      Convertendo os dados de String para os tipos de dados originais da tabela informada no parâmetro p_table, se necessário.
-      LOOP AT <f_dados_lidos> ASSIGNING <f_linha_dados_lidos>.
+*       Passa a referência da estrutura criada anteriormente para o ponteiro(Field-Symbol) <f_linha_dados_lidos_final>
+        ASSIGN w_linha_dados_lidos->* TO <f_linha_dados_lidos_final>.
 
-        MOVE-CORRESPONDING <f_linha_dados_lidos> TO <f_linha_dados_lidos_final>.
-        INSERT <f_linha_dados_lidos_final> INTO TABLE <f_dados_lidos_final>.
+*       Transfere os dados da tabela interna de strings: t_tabela_gerada(<f_dados_lidos>). Para a tabela interna: t_tabela_gerada_final(<f_dados_lidos_final>).
+*        Convertendo os dados de String para os tipos de dados originais da tabela informada no parâmetro p_table, se necessário.
+        LOOP AT <f_dados_lidos> ASSIGNING <f_linha_dados_lidos>.
 
-      ENDLOOP.
+          MOVE-CORRESPONDING <f_linha_dados_lidos> TO <f_linha_dados_lidos_final>.
+          INSERT <f_linha_dados_lidos_final> INTO TABLE <f_dados_lidos_final>.
 
-*     Insere a tabela interna, que contem os dados do arquivo CSV, na tabela transparente que foi informada em p_table. Concluindo a importação.
-      INSERT (l_nome_tabela) FROM TABLE <f_dados_lidos_final>.
+        ENDLOOP.
 
-*     Confirma as alterações no Banco de Dados.
-      COMMIT WORK.
+*       Insere a tabela interna, que contem os dados do arquivo CSV, na tabela transparente que foi informada em p_table. Concluindo a importação.
+        INSERT (l_nome_tabela) FROM TABLE <f_dados_lidos_final>.
 
-*     Mensagens de sucesso ou de erro
-      IF sy-dbcnt = 0.
-        MESSAGE TEXT-005 TYPE 'I'.
-      ELSE.
-        MESSAGE TEXT-003 TYPE 'I'.
+*       Confirma as alterações no Banco de Dados.
+        COMMIT WORK.
+
+*       Mensagens de sucesso ou de erro
+        IF sy-dbcnt = 0.
+          MESSAGE TEXT-014 TYPE 'I'.
+        ELSE.
+          MESSAGE TEXT-015 TYPE 'I'.
+        ENDIF.
       ENDIF.
 
     CATCH cx_root INTO l_root_exception.
@@ -373,7 +394,7 @@ FORM zf_insere_dados_tabela.
 
       CLEAR l_mensagem_erro.
       l_mensagem_erro = l_root_exception->get_text( ).
-      CONCATENATE 'Erro ao importar CSV: ' l_mensagem_erro  INTO l_mensagem_erro.
+      CONCATENATE TEXT-014 l_mensagem_erro  INTO l_mensagem_erro SEPARATED BY space.
       MESSAGE l_mensagem_erro TYPE 'I'.
 
   ENDTRY.
@@ -391,15 +412,11 @@ FORM zf_valida_parametros_export.
 
 * Verifica se o parâmetro p_path está vazio
   IF p_path IS INITIAL.
-    MESSAGE 'Selecione um arquivo csv valido.' TYPE 'I'.
+    MESSAGE TEXT-008 TYPE 'I'.
 
 * Verifica se o parâmetro p_table está vazio
   ELSEIF p_table IS INITIAL.
-    MESSAGE 'Digite o nome de uma tabela autorizada para importação de arquivos CSV.' TYPE 'I'.
-
-* Verifica se a tabela é uma tabela z
-  ELSEIF p_table(1) <> 'z' AND p_table(1) <> 'Z'.
-    MESSAGE 'Utilize esse programa apenas em tabelas Z.' TYPE 'I'.
+    MESSAGE TEXT-009 TYPE 'I'.
 
   ELSE.
     PERFORM zf_exporta_tabela.
@@ -423,84 +440,105 @@ FORM zf_exporta_tabela.
           p_nome_tabela   = p_table
           p_tipo_dado     = 'clone'
         CHANGING
-          t_tabela_gerada = t_tabela_gerada.
-
-*     Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
-      ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
-
-*     Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
-      SELECT *
-        FROM (l_nome_tabela)
-        INTO CORRESPONDING FIELDS OF TABLE <f_dados_lidos>.
-
-*     Percorre a tabela interna gerada e cria uma tabela interna de strings, t_csv. O loop transforma para registro em uma string, com os valores dos campos separados
-*      pelo caractere separador.
-      LOOP AT <f_dados_lidos> ASSIGNING <f_linha_dados_lidos>.
-
-        DO.
-*
-          ASSIGN COMPONENT sy-index OF STRUCTURE <f_linha_dados_lidos> TO FIELD-SYMBOL(<f_campo>).
-
-*         Se registro não tem mais campos. Sai do loop e parte para o próximo registro da tabela.
-          IF sy-subrc <> 0.
-            EXIT.
-          ENDIF.
-
-*         Se for o primeiro campo do registro. Apenas atribua seu valor na variável l_linha_csv.
-          IF sy-index = 1.
-            l_linha_csv = <f_campo>.
-*         Se não for o primeiro campo, concatena o valor que já existe na l_linha_csv com o valor do próximo campo do registro, separado por um caracter separador.
-          ELSE.
-            l_campo_csv = <f_campo>.
-            CONDENSE l_campo_csv.
-            CONCATENATE l_linha_csv l_campo_csv INTO l_linha_csv SEPARATED BY l_separa_campos.
-          ENDIF.
-
-        ENDDO.
-
-        APPEND l_linha_csv TO t_csv.
-
-      ENDLOOP.
-
-*     Cria o arquivo CSV com base na tabela interna t_csv montada anteriormente. E baixa o arquivo CSV no diretório informado no parâmetro p_path.
-      CALL FUNCTION 'GUI_DOWNLOAD'
-        EXPORTING
-          filename                = p_path
-        TABLES
-          data_tab                = t_csv
+          t_tabela_gerada = t_tabela_gerada
         EXCEPTIONS
-          file_write_error        = 1
-          no_batch                = 2
-          gui_refuse_filetransfer = 3
-          invalid_type            = 4
-          no_authority            = 5
-          unknown_error           = 6
-          header_not_allowed      = 7
-          separator_not_allowed   = 8
-          filesize_not_allowed    = 9
-          header_too_long         = 10
-          dp_error_create         = 11
-          dp_error_send           = 12
-          dp_error_write          = 13
-          unknown_dp_error        = 14
-          access_denied           = 15
-          dp_out_of_memory        = 16
-          disk_full               = 17
-          dp_timeout              = 18
-          file_not_found          = 19
-          dataprovider_exception  = 20
-          control_flush_error     = 21
-          OTHERS                  = 22.
+          OTHERS          = 1.
 
-*      CLEAR l_mensagem.
-*      CONCATENATE 'Tabela' p_table ' exportada com sucesso.' INTO l_mensagem SEPARATED BY ' '.
-*      MESSAGE l_mensagem TYPE 'I'.
+      IF sy-subrc = 0.
+
+*         Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+        ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
+
+*         Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
+        SELECT *
+          FROM (l_nome_tabela)
+          INTO CORRESPONDING FIELDS OF TABLE <f_dados_lidos>.
+
+*         Percorre a tabela interna gerada e cria uma tabela interna de strings, t_csv. O loop transforma para registro em uma string, com os valores dos campos separados
+*          pelo caractere separador.
+        LOOP AT <f_dados_lidos> ASSIGNING <f_linha_dados_lidos>.
+
+          DO.
+*
+            ASSIGN COMPONENT sy-index OF STRUCTURE <f_linha_dados_lidos> TO FIELD-SYMBOL(<f_campo>).
+
+*             Se registro não tem mais campos. Sai do loop e parte para o próximo registro da tabela.
+            IF sy-subrc <> 0.
+              EXIT.
+            ENDIF.
+
+*             Se campo for uma string com virgula, coloca entre parenteses
+            CLEAR l_campo_csv.
+            l_campo_csv = <f_campo>.
+            IF l_campo_csv CA sy-abcde.
+              IF sy-subrc = 0.
+
+                IF l_campo_csv CA ','.
+                  CONCATENATE '"' l_campo_csv '"' INTO l_campo_csv.
+                ENDIF.
+
+              ENDIF.
+            ENDIF.
+
+*             Se for o primeiro campo do registro. Apenas atribua seu valor na variável l_linha_csv.
+            IF sy-index = 1.
+              l_linha_csv = l_campo_csv.
+*             Se não for o primeiro campo, concatena o valor que já existe na l_linha_csv com o valor do próximo campo do registro, separado por um caracter separador.
+            ELSE.
+              CONDENSE l_campo_csv.
+              CONCATENATE l_linha_csv l_campo_csv INTO l_linha_csv SEPARATED BY l_separa_campos.
+            ENDIF.
+
+          ENDDO.
+
+          APPEND l_linha_csv TO t_csv.
+
+        ENDLOOP.
+
+*         Cria o arquivo CSV com base na tabela interna t_csv montada anteriormente. E baixa o arquivo CSV no diretório informado no parâmetro p_path.
+        CALL FUNCTION 'GUI_DOWNLOAD'
+          EXPORTING
+            filename                = p_path
+          TABLES
+            data_tab                = t_csv
+          EXCEPTIONS
+            file_write_error        = 1
+            no_batch                = 2
+            gui_refuse_filetransfer = 3
+            invalid_type            = 4
+            no_authority            = 5
+            unknown_error           = 6
+            header_not_allowed      = 7
+            separator_not_allowed   = 8
+            filesize_not_allowed    = 9
+            header_too_long         = 10
+            dp_error_create         = 11
+            dp_error_send           = 12
+            dp_error_write          = 13
+            unknown_dp_error        = 14
+            access_denied           = 15
+            dp_out_of_memory        = 16
+            disk_full               = 17
+            dp_timeout              = 18
+            file_not_found          = 19
+            dataprovider_exception  = 20
+            control_flush_error     = 21
+            OTHERS                  = 22.
+
+        IF sy-subrc = 0.
+          CLEAR l_mensagem.
+          CONCATENATE TEXT-016 p_path '.' p_table INTO l_mensagem SEPARATED BY space.
+          MESSAGE l_mensagem TYPE 'I'.
+        ELSE.
+          MESSAGE TEXT-017 TYPE 'I'.
+        ENDIF.
+      ENDIF.
 
     CATCH cx_root INTO l_root_exception.
 
       CLEAR l_mensagem_erro.
       l_mensagem_erro = l_root_exception->get_text( ).
-      CONCATENATE 'Erro na exportação da tabela:' l_mensagem_erro  INTO l_mensagem_erro SEPARATED BY ' '.
+      CONCATENATE TEXT-018 l_mensagem_erro  INTO l_mensagem_erro SEPARATED BY ' '.
       MESSAGE l_mensagem_erro TYPE 'I'.
 
   ENDTRY.
@@ -515,12 +553,12 @@ ENDFORM.
 *&---------------------------------------------------------------------*
 FORM zf_valida_parametros_erase.
 
-  IF p_table IS INITIAL OR ( p_table(1) <> 'z' AND p_table(1) <> 'Z' ) .
-    MESSAGE 'Digite o nome de uma tabela z existente, e segura para deletar os registros.' TYPE 'I'.
-
+  IF p_table IS INITIAL.
+    MESSAGE TEXT-009 TYPE 'I'.
+  ELSEIF p_table(1) <> 'z' AND p_table(1) <> 'Z'.
+    MESSAGE TEXT-010 TYPE 'I'.
   ELSE.
     PERFORM zf_deleta_registros.
-
   ENDIF.
 
 ENDFORM.
@@ -532,7 +570,7 @@ ENDFORM.
 *&---------------------------------------------------------------------*
 FORM zf_deleta_registros.
 
-  CONCATENATE 'Deseja realmente excluir os registros da tabela' p_table '?' INTO l_mensagem SEPARATED BY ' '.
+  CONCATENATE TEXT-019 p_table INTO l_mensagem SEPARATED BY ' '.
 
 * Chama função para exibir mensagem de confirmação na tela.
   CALL FUNCTION 'POPUP_TO_CONFIRM'
@@ -555,10 +593,70 @@ FORM zf_deleta_registros.
     DELETE FROM (l_nome_tabela).
 
     IF sy-dbcnt = 0.
-      MESSAGE 'Nenhuma alteração foi realizada na tabela!' TYPE 'I'.
+      MESSAGE TEXT-020 TYPE 'I'.
     ELSE.
-      MESSAGE 'Registros deletados com sucesso!' TYPE 'I'.
+      MESSAGE TEXT-021 TYPE 'I'.
     ENDIF.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form zf_exibe_tabela                                                *
+*&---------------------------------------------------------------------*
+*& Exibe a tabela usando ALV.                                           *
+*&---------------------------------------------------------------------*
+FORM zf_exibe_tabela.
+
+  IF p_table IS INITIAL.
+    MESSAGE TEXT-022 TYPE 'I'.
+  ELSE.
+    TRY.
+
+*       Gera tabela interna, com a estrutura da tabela informada em p_table. Em preparação para a exportação.
+        CALL FUNCTION 'ZF_GERA_TABELA'
+          EXPORTING
+            p_nome_tabela   = p_table
+            p_tipo_dado     = 'clone'
+          CHANGING
+            t_tabela_gerada = t_tabela_gerada
+          EXCEPTIONS
+            OTHERS          = 1.
+
+        IF sy-subrc = 0.
+
+*             Cria uma referência para a tabela interna gerada anteriormente, no Field Symbol <f_dados_lidos>.
+          ASSIGN t_tabela_gerada->* TO <f_dados_lidos>.
+
+*             Seleciona todos os dados da tabela transparente informada em p_table e armazena na tabela interna criada anteriormente.
+          SELECT *
+            FROM (l_nome_tabela)
+            INTO CORRESPONDING FIELDS OF TABLE <f_dados_lidos>.
+
+*             Executa ALV tendo como dados a tabela criada dinamicamente os dados
+          cl_salv_table=>factory(
+            IMPORTING
+              r_salv_table = l_salv_table
+            CHANGING
+              t_table      = <f_dados_lidos> ).
+
+          IF sy-subrc = 0.
+            l_salv_table->display( ).
+          ELSE.
+            MESSAGE TEXT-023 TYPE 'I'.
+            LEAVE LIST-PROCESSING.
+          ENDIF.
+        ENDIF.
+
+      CATCH cx_root INTO l_root_exception.
+
+        CLEAR l_mensagem_erro.
+        l_mensagem_erro = l_root_exception->get_text( ).
+        CONCATENATE TEXT-024 l_mensagem_erro  INTO l_mensagem_erro SEPARATED BY ' '.
+        MESSAGE l_mensagem_erro TYPE 'I'.
+
+    ENDTRY.
+
   ENDIF.
 
 ENDFORM.
