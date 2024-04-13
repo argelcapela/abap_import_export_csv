@@ -1,8 +1,8 @@
 Parâmetros para Importação/Exportação Arquivo CSV
 Ação a ser executada
-Atenção: Cuidado com a tabela que deseja deletar os registros!
-Escolha um diretório de exportação, autorizado!
 As colunas da tabela precisam ser compatíveis com os campos do CSV!
+Escolha um diretório de exportação, autorizado!
+Atenção: Cuidado com a tabela que deseja deletar os registros!
 Erro ao tentar selecionar arquivo:
 Erro ao tentar selecionar pasta:
 Selecione um diretório de arquivo CSV válido.
