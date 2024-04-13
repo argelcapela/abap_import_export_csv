@@ -622,6 +622,7 @@ FORM zf_exibe_tabela.
               t_table      = <f_dados_lidos> ).
 
           IF sy-subrc = 0.
+            l_salv_table->get_columns( )->set_optimize( abap_true ).
             l_salv_table->display( ).
           ELSE.
             MESSAGE TEXT-023 TYPE 'I'.
