@@ -1,0 +1,6 @@
+P_ALV	  Exibir Tabela
+P_ERASE	  Deletar registros da tabela
+P_EXPORT  Exportar Tabela Para CSV
+P_IMPORT  Importar CSV para Tabela
+P_PATH	  Diretório Arquivo CSV:
+P_TABLE	  Nome Tabela:

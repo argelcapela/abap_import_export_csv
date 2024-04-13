@@ -1,0 +1,24 @@
+Parâmetros para Importação/Exportação Arquivo CSV
+Ação a ser executada
+Atenção: Cuidado com a tabela que deseja deletar os registros!
+Escolha um diretório de exportação, autorizado!
+As colunas da tabela precisam ser compatíveis com os campos do CSV!
+Erro ao tentar selecionar arquivo:
+Erro ao tentar selecionar pasta:
+Selecione um diretório de arquivo CSV válido.
+Digite o nome de uma tabela existente.
+Utilize esse programa apenas em tabelas Z.
+Arquivo CSV Inválido!
+Erro ao ler arquivo CSV:
+Erro ao processar CSV:
+Erro ao importar arquivo CSV:
+Arquivo CSV Importado com sucesso!
+Tabela exportada para arquivo CSV com sucesso!
+Erro ao exportar tabela para arquivo CSV:
+Erro na exportação da tabela:
+Deseja realmente excluir os registros da tabela?
+Nenhuma alteração foi realizada na tabela!
+Registros deletados com sucesso!
+Informe o nome de uma tabela a ser exibida!
+Não foi possível exibir a tabela!
+Erro na exibição da tabela:
