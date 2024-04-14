@@ -1,24 +1,24 @@
-Parâmetros para Importação/Exportação Arquivo CSV
-Ação a ser executada
-As colunas da tabela precisam ser compatíveis com os campos do CSV!
-Escolha um diretório de exportação, autorizado!
-Atenção: Cuidado com a tabela que deseja deletar os registros!
-Erro ao tentar selecionar arquivo:
-Erro ao tentar selecionar pasta:
-Selecione um diretório de arquivo CSV válido.
-Digite o nome de uma tabela existente.
-Utilize esse programa apenas em tabelas Z.
-Arquivo CSV Inválido!
-Erro ao ler arquivo CSV:
-Erro ao processar CSV:
-Erro ao importar arquivo CSV:
-Arquivo CSV Importado com sucesso!
-Tabela exportada para arquivo CSV com sucesso!
-Erro ao exportar tabela para arquivo CSV:
-Erro na exportação da tabela:
-Deseja realmente excluir os registros da tabela?
-Nenhuma alteração foi realizada na tabela!
-Registros deletados com sucesso!
-Informe o nome de uma tabela a ser exibida!
-Não foi possível exibir a tabela!
-Erro na exibição da tabela:
+001 Parâmetros para Importação/Exportação Arquivo CSV
+002 Ação a ser executada
+003 As colunas da tabela precisam ser compatíveis com os campos do CSV!
+004 Escolha um diretório de exportação, autorizado!
+005 Atenção: Cuidado com a tabela que deseja deletar os registros!
+006 Erro ao tentar selecionar arquivo:
+007 Erro ao tentar selecionar pasta:
+008 Selecione um diretório de arquivo CSV válido.
+009 Digite o nome de uma tabela existente.
+010 Utilize esse programa apenas em tabelas Z.
+011 Arquivo CSV Inválido!
+012 Erro ao ler arquivo CSV:
+013 Erro ao processar CSV:
+014 Erro ao importar arquivo CSV:
+015 Arquivo CSV Importado com sucesso!
+016 Tabela exportada para arquivo CSV com sucesso!
+017 Erro ao exportar tabela para arquivo CSV:
+018 Erro na exportação da tabela:
+019 Deseja realmente excluir os registros da tabela?
+020 Nenhuma alteração foi realizada na tabela!
+021 Registros deletados com sucesso!
+022 Informe o nome de uma tabela a ser exibida!
+023 Não foi possível exibir a tabela!
+024 Erro na exibição da tabela:

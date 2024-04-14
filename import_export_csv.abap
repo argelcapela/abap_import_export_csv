@@ -484,6 +484,7 @@ FORM zf_exporta_tabela.
 
 *           Se for o primeiro campo do registro. Apenas atribua seu valor na variável l_linha_csv.
             IF sy-index = 1.
+              CONDENSE l_campo_csv.
               l_linha_csv = l_campo_csv.
 *           Se não for o primeiro campo, concatena o valor que já existe na l_linha_csv com o valor do próximo campo do registro, separado por um caracter separador.
             ELSE.
