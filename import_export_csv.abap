@@ -24,14 +24,16 @@ DATA:          t_csv_bruto                 TYPE truxs_t_text_data,              
                t_arquivo_selecionado       TYPE filetable,                      " Armazena os arquivos selecionados pelo seletor de arquivos do parâmetro p_path
                t_csv                       TYPE TABLE OF string,                " Armazena linhas do arquivo csv, em preparação para exportação.
                t_tabela_gerada             TYPE REF TO data,                    " Tabela interna gerada dinamicamente
-               t_tabela_gerada_final       TYPE REF TO data.                    " Tabela interna gerada dinamicamente
+               t_tabela_gerada_final       TYPE REF TO data,                    " Tabela interna gerada dinamicamente
+               t_campo_split               TYPE TABLE OF STRING.                " Ajuda a formatar os valores numéricos na exportação
 
 *----------------------------------------------------------------------*
 * Work Areas                                                           *
 *----------------------------------------------------------------------*
 DATA:          w_linha_dados_lidos         TYPE REF TO data,                    " Ajuda a percorrer registros da tabela interna gerada dinamicamente
                w_linha_dados_lidos_final   TYPE REF TO data,                    " Ajuda a percorrer registros da tabela interna gerada dinamicamente
-               w_arquivo_selecionado       LIKE LINE OF t_arquivo_selecionado.  " Armazena da tabela de arquivos selecionados pelo seletor de arquivos
+               w_arquivo_selecionado       LIKE LINE OF t_arquivo_selecionado,  " Armazena da tabela de arquivos selecionados pelo seletor de arquivos
+               w_dps_ponto                 TYPE STRING.                         " Extrai os números dps do ponto, se o número tiver casas decimais
 
 *----------------------------------------------------------------------*
 * Variáveis                                                            *
@@ -47,7 +49,10 @@ DATA:          l_delimita_linhas           TYPE cl_rsda_csv_converter=>char,    
                l_linha_csv                 TYPE string,                         " Armazena linha do arquivo csv, em preparação para exportação.
                l_campo_csv                 TYPE string,                         " Armazena campo da linha csv, em preparação para exportação.
                l_csv_converter             TYPE REF TO cl_rsda_csv_converter,   " Objeto conversor de string csv para estrutura
-               l_salv_table                TYPE REF TO cl_salv_table.           " Ajuda a gerar o relatório ALV da tabela
+               l_salv_table                TYPE REF TO cl_salv_table,           " Ajuda a gerar o relatório ALV da tabela
+               l_tudo_zero                 TYPE c,                              " Sinaliza se o número possui valores depois do . diferentes de zero.
+               l_index                     LIKE SY-INDEX,                       " Indica o número de repetições do LOOP DO. ENDDO.
+               l_char                     TYPE c.                              " Indica uma letra, ao percorrer uma string.
 
 *----------------------------------------------------------------------*
 * Field-Symbols                                                        *
@@ -473,22 +478,50 @@ FORM zf_exporta_tabela.
             CLEAR l_campo_csv.
             l_campo_csv = <f_campo>.
             IF l_campo_csv CA sy-abcde.
-              IF sy-subrc = 0.
 
                 IF l_campo_csv CA ','.
                   CONCATENATE '"' l_campo_csv '"' INTO l_campo_csv.
                 ENDIF.
 
-              ENDIF.
+            ELSE.
+
+              IF l_campo_csv CA '.'.
+*****************************************************************************
+* Se o número tiver casas decimais (123.000). Se dps do ponto tiver apenas
+* zero, remove as casas decimais. Caso contrário, arredonda para duas
+* casas decimais depois do ponto.
+*****************************************************************************
+                  l_tudo_zero = 'x'.
+                  CONDENSE l_campo_csv NO-GAPS.
+
+                  SPLIT l_campo_csv AT '.' INTO TABLE t_campo_split.
+                  READ TABLE t_campo_split INDEX 2 INTO w_dps_ponto.
+
+                  DO STRLEN( w_dps_ponto ) TIMES.
+                    l_index = SY-INDEX - 1.
+                    l_char = w_dps_ponto+l_index(1).
+                    IF l_char NE '0' AND l_char NE '-'.
+                      l_tudo_zero = ''.
+                      EXIT.
+                    ENDIF.
+                  ENDDO.
+
+                  IF l_tudo_zero = 'x'.
+                    l_campo_csv = ROUND( val = <f_campo> dec = 0 ).
+                  ELSE.
+                    l_campo_csv = ROUND( val = <f_campo> dec = 2 ).
+                  ENDIF.
+****************************************************************************
+             ENDIF.
+
             ENDIF.
 
+            CONDENSE l_campo_csv.
 *           Se for o primeiro campo do registro. Apenas atribua seu valor na variável l_linha_csv.
             IF sy-index = 1.
-              CONDENSE l_campo_csv.
               l_linha_csv = l_campo_csv.
 *           Se não for o primeiro campo, concatena o valor que já existe na l_linha_csv com o valor do próximo campo do registro, separado por um caracter separador.
             ELSE.
-              CONDENSE l_campo_csv.
               CONCATENATE l_linha_csv l_campo_csv INTO l_linha_csv SEPARATED BY l_separa_campos.
             ENDIF.
 
