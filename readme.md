@@ -1,17 +1,17 @@
 <h1 align="center"> abap_import_export_csv </h1>
 
 ## :memo: Descrição
-Programa ABAP que permite importar ou exportar arquivos CSV, facilmente. Um grande diferencial é a capacidade de identificar a tabela apenas digitando seu nome em uma caixa de texto na tela de seleção. O que torna o programa muita mais versátil.
+Programa ABAP que permite importar ou exportar arquivos CSV facilmente. Um grande diferencial é a capacidade de identificar a tabela apenas digitando seu nome em uma caixa de texto na tela de seleção. O que torna o programa muito mais versátil.
 
 ## 📷 Preview
 <img src=".readme/tela_de_selecao.png" alt="Tela de Seleção" width="600px">
-<a href="https://youtu.be/AyIN5bguByM">Vídeo de Demonstração do abap_import_export_csv</a>
+<a href="https://youtu.be/hZGbBWXTuTE">Vídeo de Demonstração do abap_import_export_csv</a>
 
 ## :books: Funcionalidades
 * Importar arquivo CSV para tabela.
 * Exportar tabela para arquivo CSV.
-* Deletar todos os registros de uma tabela, fornecendo o nome.
-* Exibir ALV de uma tabela, fornecendo o nome.
+* Deletar todos os registros de uma tabela através do nome.
+* Exibir ALV de uma tabela através do nome.
 
 ## :rocket: Rodando o projeto
 <a href="https://github.com/argelcapela/abap_import_export_csv">Código Fonte no Github: abap_import_export_csv</a>
