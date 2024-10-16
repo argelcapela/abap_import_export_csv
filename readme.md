@@ -15,17 +15,14 @@ Programa ABAP que permite importar ou exportar arquivos CSV facilmente. Um grand
 
 ## :rocket: Rodando o projeto
 <a href="https://github.com/argelcapela/abap_import_export_csv">Código Fonte no Github: abap_import_export_csv</a>
-
 1) Acesse a transação SE38, crie um programa chamado zimport_export_csv e copie o código fonte do programa.
 2) Ainda na SE38, editando o programa criado anteriormente, acesse os elementos de texto do programa. Copie e cole os elementos de texto 1 e 2, nas seções de text elements e selection texts.
 3) Acesse a transação SE37, crie uma função chamada zf_gera_tabela e copie o código fonte da função. (É necessário criar um grupo de função antes de criar uma função, para isso acesse a transação SE80 e crie o grupo.)
-<br><br>
-<b>Configurando Import, Changing e Exceptions na SE37:<b><br>
+<br>
+<b>Configurando Import, Changing e Exceptions na SE37:</b><br>
 <img src=".readme/config_se37_import.png" width="600px">
 <img src=".readme/config_se37_changing.png" width="600px">
 <img src=".readme/config_se37_exceptions.png" width="600px">
-<br>
-<br>
 4) Depois que tudo for criado, ative o programa, função e grupo de função. Depois execute e seja feliz. 🙏😁
 
 ## :wrench: Tecnologias utilizadas
@@ -58,3 +55,6 @@ Programa ABAP que permite importar ou exportar arquivos CSV facilmente. Um grand
 
 ## 🦟 Erros/Feedback
 Identificou algum erro ou tem alguma sugestão? Por favor me informe, fico feliz em seguir aprendendo mais e melhorando.
+
+## 🔐 Licença
+<a href="LICENSE">MIT, Copyright (c) 2024 Argel Capela</a>
